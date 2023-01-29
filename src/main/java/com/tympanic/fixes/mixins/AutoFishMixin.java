@@ -1,4 +1,4 @@
-package com.example.addon.mixins;
+package com.tympanic.fixes.mixins;
 
 import meteordevelopment.meteorclient.events.world.TickEvent;
 import meteordevelopment.meteorclient.settings.BoolSetting;
@@ -10,8 +10,10 @@ import meteordevelopment.meteorclient.systems.modules.Module;
 import meteordevelopment.meteorclient.systems.modules.player.AutoFish;
 import meteordevelopment.meteorclient.utils.Utils;
 import meteordevelopment.meteorclient.utils.player.ChatUtils;
+import meteordevelopment.meteorclient.utils.player.InvUtils;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.util.Formatting;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,11 +21,10 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(value = AutoFish.class, remap = false)
-public abstract class AutoFishMixin extends Module {
+public abstract class AutoFishMixin extends Module{
     private AutoFishMixin(Category category, String name, String description) {
         super(category, name, description);
     }
-
     private Setting<Boolean> dura;
     private Setting<Integer> duraAmount;
     private Setting<Boolean> duraSwitch;
@@ -40,7 +41,7 @@ public abstract class AutoFishMixin extends Module {
                 if (n) {
                     ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY, "Durability on");
                 } else {
-                    ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY, "Durability off");
+                    ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY,"Durability off");
                 }
             })
             .defaultValue(false)
@@ -51,7 +52,7 @@ public abstract class AutoFishMixin extends Module {
             .name("Durability Stop Amount")
             .description("amount used to stop and switch rods")
             .visible(dura::get)
-            .defaultValue(1)
+            .defaultValue(2)
             .sliderRange(1, 64)
             .build()
         );
@@ -85,29 +86,36 @@ public abstract class AutoFishMixin extends Module {
     private void onTick(TickEvent.Post event, CallbackInfo ci) {
         assert mc.player != null;
         PlayerInventory inventory = mc.player.getInventory();
-        if (dura.get()){
-            if (duraSwitch.get() && inventory.main.get(duraSwitchSlot.get()).getMaxDamage() - inventory.main.get(duraSwitchSlot.get()).getDamage() <= duraAmount.get()) {
-                boolean foundItem = false;
-                int count;
-                for (count = 0; count<inventory.size(); count++) {
-                    ItemStack stack = inventory.getStack(count);
-                    System.out.println(stack.getMaxDamage() - stack.getDamage());
-                    if (stack.getTranslationKey().equals("item.minecraft.fishing_rod") && stack.getMaxDamage() - stack.getDamage() > duraAmount.get()) {
-                        ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY, "Durability switch item found: switching slots");
-                        ItemStack stack2 = inventory.main.get(duraSwitchSlot.get());
-                        inventory.main.set(count, stack2);
-                        inventory.main.set(duraSwitchSlot.get(), stack);
-                        foundItem = true;
-                        break;
+        if (dura.get()) {
+            if (duraSwitch.get()) {
+                ItemStack currentRod = inventory.getStack(duraSwitchSlot.get());
+                if (!currentRod.isOf(Items.FISHING_ROD) || currentRod.getMaxDamage() - currentRod.getDamage() <= duraAmount.get()) {
+                    boolean foundHigherDurabilityRod = false;
+                    for (int count = 0; count < inventory.size(); count++) {
+                        ItemStack stack = inventory.getStack(count);
+                        if (stack.isOf(Items.FISHING_ROD) && stack.getMaxDamage() - stack.getDamage() > currentRod.getMaxDamage() - currentRod.getDamage()) {
+                            foundHigherDurabilityRod = true;
+                            ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY, "Durability switch item found: switching slots");
+                            InvUtils.move().from(count).to(duraSwitchSlot.get());
+                            InvUtils.swap(duraSwitchSlot.get(), false);
+                            break;
+                        }
+                    }
+                    if (!foundHigherDurabilityRod) {
+                        ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY, "Cannot find another rod with higher durability: stopping");
+                        toggle();
                     }
                 }
-                if (!foundItem) {
-                    ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY, "Durability switch cannot find another rod: stopping");
+            } else {
+                ItemStack currentRod = mc.player.getMainHandStack();
+                if (!currentRod.isOf(Items.FISHING_ROD)) {
+                    ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY, "Not holding a fishing rod: stopping");
                     toggle();
                 }
-            } else if (inventory.main.get(inventory.selectedSlot).getMaxDamage() - inventory.main.get(inventory.selectedSlot).getDamage() <= duraAmount.get()){
-                ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY, "Durability matches setting: stopping");
-                toggle();
+                else if (currentRod.getMaxDamage() - currentRod.getDamage() <= duraAmount.get()) {
+                    ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY, "Durability matches setting: stopping");
+                    toggle();
+                }
             }
         }
     }
@@ -117,7 +125,7 @@ public abstract class AutoFishMixin extends Module {
         if (dura.get() && duraSwitch.get()) {
             assert mc.player != null;
             if (mc.player.getInventory().selectedSlot != duraSwitchSlot.get()) {
-                ChatUtils.sendMsg(0, "AutoFish", Formatting.BLUE, Formatting.GRAY, "Switching selected slot to slot in settings");
+                ChatUtils.sendMsg(0, "AutoFish", Formatting.DARK_RED, Formatting.GRAY, "Switching selected slot to slot in settings");
                 mc.player.getInventory().selectedSlot = duraSwitchSlot.get();
             }
         }

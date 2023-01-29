@@ -1,12 +1,11 @@
 {
   "required": true,
-  "package": "com.example.addon.mixins",
+  "package": "com.tympanic.fixes.mixins",
   "compatibilityLevel": "JAVA_17",
   "client": [
     "AutoFishMixin"
   ],
   "injectors": {
     "defaultRequire": 1
-  },
-  "mixins": []
+  }
 }
